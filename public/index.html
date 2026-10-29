@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0d14" />
+    <title>Yuki</title>
+    <link rel="stylesheet" href="/styles.css?v=20261030-1" />
+    <script type="importmap">{
+      "imports": {
+        "three": "/vendor/three.module.js"
+      }
+    }</script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="window-bar">
+        <div class="window-brand">
+          <div id="resourceMonitor" class="resource-strip" aria-label="Sistem kullanımı" data-i18n-aria="systemUsage">
+            <div class="resource-meter" title="İşlemci kullanımı" data-i18n-title="cpuUsage">
+              <div class="resource-meter-label"><strong>CPU</strong><span id="cpuValue">—</span></div>
+              <div class="resource-track" role="progressbar" aria-label="İşlemci kullanımı" data-i18n-aria="cpuUsage" aria-valuemin="0" aria-valuemax="100"><span id="cpuBar"></span></div>
+            </div>
+            <div class="resource-meter" title="Sistem belleği kullanımı" data-i18n-title="memoryUsage">
+              <div class="resource-meter-label"><strong>RAM</strong><span id="ramValue">—</span></div>
+              <div class="resource-track" role="progressbar" aria-label="RAM kullanımı" data-i18n-aria="memoryUsage" aria-valuemin="0" aria-valuemax="100"><span id="ramBar"></span></div>
+            </div>
+            <div class="resource-meter resource-gpu" title="GPU ve toplam VRAM kullanımı" data-i18n-title="gpuAndVram">
+              <div class="resource-meter-label"><strong>GPU</strong><span id="gpuValue">—</span></div>
+              <div class="resource-track" role="progressbar" aria-label="GPU kullanımı" data-i18n-aria="gpuAndVram" aria-valuemin="0" aria-valuemax="100"><span id="gpuBar"></span></div>
+              <small id="vramValue">VRAM —</small>
+            </div>
+          </div>
+        </div>
+        <div class="window-actions" aria-label="Pencere denetimleri" data-i18n-aria="windowControls">
+          <button type="button" data-window-action="minimize" aria-label="Küçült" data-i18n-aria="minimize">−</button>
+          <button type="button" data-window-action="maximize" aria-label="Büyüt" data-i18n-aria="maximize">□</button>
+          <button class="close" type="button" data-window-action="close" aria-label="Kapat" data-i18n-aria="close">×</button>
+        </div>
+      </header>
+
+      <div class="app-content">
+        <section class="chat-panel">
+          <header class="chat-header">
+            <div class="chat-heading-row">
+              <p class="eyebrow" data-i18n="chat">Sohbet</p>
+              <div class="chat-heading-actions">
+                <label class="ui-language-control" for="uiLanguage">
+                  <span data-i18n="uiLanguage">Arayüz</span>
+                  <select id="uiLanguage" aria-label="Interface language">
+                    <option value="en">English</option>
+                    <option value="tr">Türkçe</option>
+                  </select>
+                </label>
+                <button id="avatarToggle" class="avatar-toggle" type="button" aria-pressed="false" title="Yuki avatarını göster" data-i18n-title="showAvatar">
+                  <span data-i18n="avatar">Avatar</span><span id="avatarToggleState" data-i18n="off">Kapalı</span>
+                </button>
+              </div>
+            </div>
+            <div class="header-controls">
+              <div class="connection-pill"><span id="providerBadge" data-i18n="connecting">BAĞLANIYOR</span></div>
+              <div class="header-settings" role="group" aria-label="Yanıt ayarları" data-i18n-aria="responseSettings">
+                <div class="gpu-mode-control" role="group" aria-label="Performans ve kalite modları" data-i18n-aria="performanceQuality">
+                  <button id="gpuModePerformance" type="button" aria-pressed="false" data-i18n="performance">Performans</button>
+                  <button id="gpuModeQuality" type="button" aria-pressed="true" data-i18n="quality">Kalite</button>
+                </div>
+                <label class="thinking-toggle" title="Ollama'da daha ayrıntılı ama daha yavaş yanıtlar" data-i18n-title="thinkingTitle">
+                  <span class="thinking-copy"><strong data-i18n="thinking">Düşünme</strong><small id="thinkingState">kapalı · hızlı</small></span>
+                  <input id="thinkingToggle" type="checkbox" />
+                  <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                </label>
+                <label class="speech-toggle" title="Yuki'nin sesli yanıtlarını aç veya kapat" data-i18n-title="voiceTitleOn">
+                  <span class="thinking-copy"><strong data-i18n="voiceReply">Sesli yanıt</strong><small id="speechState">açık</small></span>
+                  <input id="speechToggle" type="checkbox" checked />
+                  <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                </label>
+                <label class="language-control" for="replyLanguage">
+                  <span class="language-copy"><strong data-i18n="replyLanguage">Yanıt dili</strong><small data-i18n="yukiReplies">Yuki'nin cevapları</small></span>
+                  <select id="replyLanguage" aria-label="Yuki'nin yanıt dili" data-i18n-aria="replyLanguageAria">
+                    <option value="en">English</option>
+                    <option value="tr">Türkçe</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </header>
+
+          <div id="messages" class="messages" aria-live="polite">
+            <div id="emptyState" class="empty-state">
+              <span class="empty-orb"></span>
+              <p data-i18n="sayHello">Merhaba de.</p>
+              <small data-i18n="waitingForYou">Yuki seni bekliyor.</small>
+            </div>
+          </div>
+
+          <form id="chatForm" class="composer">
+            <button id="googleSearchButton" class="google-search-button" type="button" title="Araştırma modunu aç" aria-label="Araştırma modunu aç" data-i18n-title="researchOff" data-i18n-aria="researchOff" aria-pressed="false">G</button>
+            <button id="micButton" class="mic-button" type="button" title="Sürekli açık sesli girişi başlat" aria-label="Sürekli açık sesli girişi aç veya kapat" data-i18n-title="alwaysListenOn" data-i18n-aria="alwaysListenToggle" aria-pressed="false">⌁</button>
+            <input id="messageInput" autocomplete="off" placeholder="Mesajını yaz..." aria-label="Mesajın" data-i18n-placeholder="messagePlaceholder" data-i18n-aria="messageAria" />
+            <button class="send-button" type="submit" aria-label="Gönder" title="Gönder" data-i18n-aria="send" data-i18n-title="send"><span class="send-icon" aria-hidden="true">↑</span></button>
+          </form>
+          <div class="model-preset-row">
+            <label for="modelPreset" data-i18n="model">Yuki modeli</label>
+            <select id="modelPreset" aria-label="Yuki modelini seç" data-i18n-aria="chooseModel">
+              <option value="core" data-i18n="coreModel">Yuki Core · Qwen2.5 7B</option>
+              <option value="code" data-i18n="codeModel">Yuki Code · Qwen2.5 Coder 7B</option>
+            </select>
+            <span id="modelPresetStatus" aria-live="polite"></span>
+          </div>
+          <div id="approvalMode" class="approval-mode" role="group" aria-label="Bilgisayar işlemleri için onay tercihi" data-i18n-aria="approvalPreference">
+            <span data-i18n="actionPermission">İşlem izni</span>
+            <button type="button" data-approval-mode="ask" aria-pressed="true" data-i18n="askApproval">Onay İste</button>
+            <button type="button" data-approval-mode="auto" aria-pressed="false" data-i18n="autoApprove">Benim için onayla</button>
+          </div>
+          <p id="voiceNotice" class="voice-notice" aria-live="polite" hidden></p>
+        </section>
+
+        <aside class="avatar-panel" aria-label="Yuki karakteri" data-i18n-aria="avatarCharacter">
+          <div class="avatar-panel-top"></div>
+          <div id="avatarStage" class="avatar-stage" aria-label="Yuki 3B karakteri" data-i18n-aria="avatar3d"></div>
+          <div id="avatarLoadStatus" class="avatar-load-status" hidden></div>
+          <div class="avatar-caption"><strong>Yuki</strong></div>
+        </aside>
+
+        <aside class="history-panel" aria-label="Sohbet geçmişi" data-i18n-aria="conversations">
+          <div class="history-heading">
+            <div>
+              <p class="eyebrow" data-i18n="archive">ARŞİV</p>
+              <h2 data-i18n="conversations">Sohbetler</h2>
+            </div>
+            <button id="newConversationButton" class="icon-button" type="button" aria-label="Yeni sohbet başlat" title="Yeni sohbet başlat" data-i18n-aria="newConversation" data-i18n-title="newConversation">+</button>
+          </div>
+          <button id="newConversationWideButton" class="new-chat-button" type="button" data-i18n="newChat">+ Yeni sohbet</button>
+          <section class="project-section" aria-label="Projeler" data-i18n-aria="projects">
+            <div class="project-section-heading">
+              <button id="projectSectionToggle" class="project-collapse-toggle" type="button" aria-controls="projectList" aria-expanded="true">
+                <h3 data-i18n="projects">Projeler</h3><span class="section-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <button id="addProjectButton" class="project-add-button" type="button" aria-label="Proje klasörü ekle" title="Proje klasörü ekle" data-i18n-aria="addProject" data-i18n-title="addProject">+</button>
+            </div>
+            <div id="projectList" class="project-list"></div>
+          </section>
+          <section class="project-section computer-access-section" aria-label="Bilgisayar dosyaları" data-i18n-aria="computerFiles">
+            <div class="project-section-heading">
+              <button id="computerFolderSectionToggle" class="project-collapse-toggle" type="button" aria-controls="computerFolderList" aria-expanded="true">
+                <h3 data-i18n="computerFiles">Bilgisayar dosyaları</h3><span class="section-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <button id="addComputerFolderButton" class="project-add-button" type="button" aria-label="Erişim klasörü ekle" title="Yuki'nin arayabileceği klasörleri ekle" data-i18n-aria="addFolderAccess" data-i18n-title="addFolderAccess">+</button>
+            </div>
+            <div id="computerFolderList" class="project-list"></div>
+          </section>
+          <h3 class="recent-heading" data-i18n="recent">Yakın zamanlar</h3>
+          <div id="conversationList" class="conversation-list" aria-live="polite">
+            <p class="history-loading" data-i18n="loadingChats">Sohbetler yükleniyor...</p>
+          </div>
+        </aside>
+      </div>
+    </main>
+  <script type="module" src="/app.js?v=20261030-1"></script>
+  </body>
+</html>

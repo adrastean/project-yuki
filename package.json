@@ -1,0 +1,86 @@
+{
+  "name": "project-yuki",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A bilingual, extensible desktop AI agent built with Electron and Node.js",
+  "type": "module",
+  "main": "electron-main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "server": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "app": "electron .",
+    "build:win": "electron-builder --win dir --config.electronDist=node_modules/electron/dist"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.projectyuki.yuki",
+    "productName": "Yuki",
+    "asar": true,
+    "files": [
+      "electron-main.mjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "server.js",
+        "to": "yuki-runtime/server.js"
+      },
+      {
+        "from": "src",
+        "to": "yuki-runtime/src"
+      },
+      {
+        "from": "public",
+        "to": "yuki-runtime/public",
+        "filter": ["**/*", "!assets/yuki.vrm", "!assets/re4-item-confirm-sound.mp3"]
+      },
+      {
+        "from": "tools/edge-tts",
+        "to": "yuki-runtime/tools/edge-tts",
+        "filter": ["synthesize.py"]
+      },
+      {
+        "from": "tools/qwen-tts",
+        "to": "yuki-runtime/tools/qwen-tts",
+        "filter": ["qwen_tts_server.py"]
+      },
+      {
+        "from": "tools/vosk",
+        "to": "yuki-runtime/tools/vosk",
+        "filter": ["listen.py"]
+      },
+      {
+        "from": "tools/whisper",
+        "to": "yuki-runtime/tools/whisper",
+        "filter": ["listen.py"]
+      },
+      {
+        "from": ".env.example",
+        "to": "yuki-runtime/.env.example"
+      }
+    ],
+    "win": {
+      "signExecutable": false,
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
+    "three": "^0.160.0"
+  }
+}

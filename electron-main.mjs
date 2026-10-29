@@ -6,9 +6,9 @@ import os from "node:os";
 import { extname, join, dirname, relative, sep, isAbsolute, parse } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-// Keep the same Electron profile name in source and packaged builds so both use one chat archive.
-// Kaynak ve paket sürümleri aynı Electron profil adını kullanır; sohbet arşivleri ortak kalır.
-app.setName("Yuki");
+// Preserve the established profile so existing chats, language and permissions stay available.
+// Önceden kullanılan profili koru; sohbetler, dil ve izin ayarları yerinde kalsın.
+app.setName("project-yuki");
 if (process.platform === "win32") app.setAppUserModelId("com.projectyuki.yuki");
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));

@@ -10,7 +10,7 @@
     "server": "node --env-file-if-exists=.env server.js",
     "dev": "node --env-file-if-exists=.env --watch server.js",
     "app": "electron .",
-    "build:win": "electron-builder --win dir --config.electronDist=node_modules/electron/dist"
+    "build:win": "electron-builder --win dir --config.electronDist=node_modules/electron/dist --config electron-builder.config.cjs"
   },
   "engines": {
     "node": ">=20"
@@ -69,7 +69,6 @@
     ],
     "win": {
       "signExecutable": false,
-      "icon": "build/iconyuki.ico",
       "target": [
         {
           "target": "dir",

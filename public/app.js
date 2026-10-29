@@ -962,15 +962,10 @@ async function initializeConversations() {
     stored = [];
   }
   conversations = stored;
-  if (!conversations.length) {
-    try {
-      const response = await fetch("/api/conversations");
-      const data = await response.json();
-      if (response.ok && Array.isArray(data.conversations)) conversations = data.conversations.map(normalizeConversation);
-    } catch (error) {
-      console.warn("Yuki conversation archive could not be loaded.", error);
-    }
-  }
+  // The chat list is owned by this UI's local archive; the model-memory transcript is append-only
+  // and must never repopulate chats that the user deleted.
+  // Sohbet listesinin kaynağı arayüzün yerel arşividir; model hafızası eklemeli tutulur ve silinen
+  // sohbetleri yeniden listeye eklemek için kullanılmamalıdır.
   const savedCurrentId = localStorage.getItem("yuki-current-conversation");
   const selected = conversations.find((conversation) => conversation.id === savedCurrentId)
     || [...conversations].sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt))[0];

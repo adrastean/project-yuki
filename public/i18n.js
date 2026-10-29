@@ -331,7 +331,10 @@ const messages = {
   }
 };
 
-let activeLanguage = localStorage.getItem("yuki-ui-language") === "tr" ? "tr" : "en";
+// Default new installs to Turkish, but preserve a language the user explicitly chose.
+// Yeni kurulumlarda varsayılanı Türkçe yap; kullanıcının açıkça seçtiği dili koru.
+const storedLanguage = localStorage.getItem("yuki-ui-language");
+let activeLanguage = storedLanguage === "en" ? "en" : "tr";
 
 // Resolve a localized string and substitute named values. / Yerelleştirilmiş metni bulur ve değişkenleri yerleştirir.
 export function t(key, values = {}) {

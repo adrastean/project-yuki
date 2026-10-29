@@ -69,6 +69,7 @@
     ],
     "win": {
       "signExecutable": false,
+      "icon": "build/iconyuki.ico",
       "target": [
         {
           "target": "dir",

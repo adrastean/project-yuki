@@ -4,6 +4,79 @@ import { VRMLoaderPlugin, VRMUtils } from "/vendor/three-vrm.module.js";
 import { desktopIntent } from "/desktop-intents.js";
 import { applyTranslations, getUiLanguage, setUiLanguage, t } from "/i18n.js";
 
+// Restore user settings before controls read localStorage; the server keeps them stable across ports.
+// Kontroller localStorage okumadan önce ayarları yükle; sunucu bunları port değişse de saklar.
+const preferenceSnapshot = () => {
+  const preferences = {};
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith("yuki-") && key !== "yuki-conversations-v1") preferences[key] = localStorage.getItem(key) || "";
+  }
+  return preferences;
+};
+
+let preferencesReady = false;
+let preferenceSaveTimer = null;
+let preferenceSaveQueue = Promise.resolve();
+
+async function savePreferences(keepalive = false) {
+  const body = JSON.stringify({ preferences: preferenceSnapshot() });
+  if (keepalive && navigator.sendBeacon) {
+    navigator.sendBeacon("/api/preferences", new Blob([body], { type: "application/json" }));
+    return;
+  }
+  preferenceSaveQueue = preferenceSaveQueue.catch(() => {}).then(() => fetch("/api/preferences", {
+    method: "PUT", headers: { "content-type": "application/json" }, body
+  })).catch((error) => console.warn("Yuki preference save failed.", error));
+  await preferenceSaveQueue;
+}
+
+async function restorePreferences() {
+  try {
+    const response = await fetch("/api/preferences", { cache: "no-store" });
+    const data = await response.json();
+    const local = preferenceSnapshot();
+    if (data.initialized && data.preferences && typeof data.preferences === "object") {
+      const merged = { ...local, ...data.preferences };
+      for (const [key, value] of Object.entries(merged)) localStorage.setItem(key, String(value));
+      if (Object.keys(merged).length > Object.keys(data.preferences).length) {
+        await fetch("/api/preferences", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ preferences: merged }) });
+      }
+    } else if (Object.keys(local).length) {
+      await fetch("/api/preferences", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ preferences: local }) });
+    }
+  } catch (error) {
+    console.warn("Yuki preferences could not be restored; using this profile's local settings.", error);
+  }
+  setUiLanguage(localStorage.getItem("yuki-ui-language") === "en" ? "en" : "tr");
+  preferencesReady = true;
+  const scheduleSave = () => {
+    if (!preferencesReady) return;
+    clearTimeout(preferenceSaveTimer);
+    preferenceSaveTimer = setTimeout(() => { void savePreferences(); }, 120);
+  };
+  try {
+    const originalSet = Storage.prototype.setItem;
+    const originalRemove = Storage.prototype.removeItem;
+    Object.defineProperty(Storage.prototype, "setItem", { configurable: true, writable: true, value(key, value) {
+      originalSet.call(this, key, value);
+      if (this === localStorage && String(key).startsWith("yuki-") && String(key) !== "yuki-conversations-v1") scheduleSave();
+    } });
+    Object.defineProperty(Storage.prototype, "removeItem", { configurable: true, writable: true, value(key) {
+      originalRemove.call(this, key);
+      if (this === localStorage && String(key).startsWith("yuki-") && String(key) !== "yuki-conversations-v1") scheduleSave();
+    } });
+    window.addEventListener("pagehide", () => {
+      clearTimeout(preferenceSaveTimer);
+      void savePreferences(true);
+    });
+  } catch (error) {
+    console.warn("Yuki could not install persistent preference hooks.", error);
+  }
+}
+
+await restorePreferences();
+
 // The interface locale is independent from Yuki's reply language.
 // Arayüz dili, Yuki'nin yanıt dili ayarından bağımsızdır.
 const messages = document.querySelector("#messages");
@@ -77,6 +150,7 @@ let activeSpeechAudio = null;
 let history = [];
 let conversations = [];
 let projects = [];
+let conversationArchiveSaveQueue = Promise.resolve();
 let currentConversationId = null;
 let activeProjectId = localStorage.getItem("yuki-active-project") || null;
 let conversationsReady = false;
@@ -496,8 +570,15 @@ function formatConversationDate(value) {
 
 function saveConversations() {
   try {
-    localStorage.setItem(conversationStorageKey, JSON.stringify(conversations.slice(-80)));
+    const archive = conversations.slice(-80);
+    localStorage.setItem(conversationStorageKey, JSON.stringify(archive));
     if (currentConversationId) localStorage.setItem("yuki-current-conversation", currentConversationId);
+    if (conversationsReady) {
+      const body = JSON.stringify({ conversations: archive });
+      conversationArchiveSaveQueue = conversationArchiveSaveQueue.catch(() => {}).then(() => fetch("/api/conversations", {
+        method: "PUT", headers: { "content-type": "application/json" }, body
+      })).catch((error) => console.warn("Yuki chat archive save failed.", error));
+    }
   } catch (error) {
     console.warn("Yuki conversation archive could not be saved.", error);
   }
@@ -962,10 +1043,19 @@ async function initializeConversations() {
     stored = [];
   }
   conversations = stored;
-  // The chat list is owned by this UI's local archive; the model-memory transcript is append-only
-  // and must never repopulate chats that the user deleted.
-  // Sohbet listesinin kaynağı arayüzün yerel arşividir; model hafızası eklemeli tutulur ve silinen
-  // sohbetleri yeniden listeye eklemek için kullanılmamalıdır.
+  try {
+    const response = await fetch("/api/conversations", { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok && data.initialized && Array.isArray(data.conversations)) {
+      conversations = data.conversations.map(normalizeConversation);
+    } else if (!stored.some((conversation) => conversation.messages.length) && Array.isArray(data.conversations)) {
+      // Import the append-only legacy transcript once into the durable archive; later deletions stay deleted.
+      // Eski eklemeli konuşma kaydını kalıcı arşive bir kez aktar; sonraki silmeler kalıcı kalsın.
+      conversations = data.conversations.map(normalizeConversation);
+    }
+  } catch (error) {
+    console.warn("Yuki's durable chat archive is unavailable; using this profile's local archive.", error);
+  }
   const savedCurrentId = localStorage.getItem("yuki-current-conversation");
   const selected = conversations.find((conversation) => conversation.id === savedCurrentId)
     || [...conversations].sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt))[0];

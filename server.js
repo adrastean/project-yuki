@@ -9,10 +9,13 @@ import { demoReply, detectLanguagePreference, detectLocalAction, detectLocalSmal
 import { providerStatus, voiceStatus, generateReply, generateSpeech, listenForSpeech, ensureSir, shutdownSpeechProcesses } from "./src/provider.js";
 import { clearMemory, forgetFacts, getMemoryContext, listConversationSessions, parseMemoryCommand, recordConversation, rememberFact } from "./src/memory.js";
 import { formatWebContext, searchWeb, shouldSearchWeb } from "./src/web-search.js";
+import { readStateFile, writeStateFile } from "./src/state-store.js";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(root, "public");
 const port = Number(process.env.PORT || 3030);
+const conversationArchiveFile = resolve(process.env.YUKI_CHAT_ARCHIVE_FILE || join(root, "data", "yuki-chat-archive.json"));
+const preferencesFile = resolve(process.env.YUKI_PREFERENCES_FILE || join(root, "data", "yuki-preferences.json"));
 const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon" };
 
 function sendJson(res, status, data) {
@@ -43,7 +46,33 @@ function createServer() {
   return http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/api/status") return sendJson(res, 200, { ok: true, provider: providerStatus(), voice: voiceStatus(), name: "Yuki" });
-    if (req.method === "GET" && req.url === "/api/conversations") return sendJson(res, 200, { conversations: await listConversationSessions() });
+    if (req.method === "GET" && req.url === "/api/conversations") {
+      const stored = await readStateFile(conversationArchiveFile);
+      return sendJson(res, 200, stored.initialized
+        ? { initialized: true, conversations: Array.isArray(stored.value) ? stored.value : [] }
+        : { initialized: false, conversations: await listConversationSessions() });
+    }
+    if (req.method === "PUT" && req.url === "/api/conversations") {
+      const payload = await bodyJson(req);
+      if (!Array.isArray(payload.conversations)) return sendJson(res, 400, { error: "Invalid conversation archive." });
+      await writeStateFile(conversationArchiveFile, payload.conversations.slice(-80));
+      return sendJson(res, 200, { ok: true });
+    }
+    if (req.method === "GET" && req.url === "/api/preferences") {
+      const stored = await readStateFile(preferencesFile);
+      return sendJson(res, 200, stored.initialized
+        ? { initialized: true, preferences: stored.value && typeof stored.value === "object" ? stored.value : {} }
+        : { initialized: false, preferences: null });
+    }
+    if ((req.method === "PUT" || req.method === "POST") && req.url === "/api/preferences") {
+      const payload = await bodyJson(req);
+      if (!payload.preferences || typeof payload.preferences !== "object" || Array.isArray(payload.preferences)) return sendJson(res, 400, { error: "Invalid preferences." });
+      const preferences = Object.fromEntries(Object.entries(payload.preferences)
+        .filter(([key, value]) => key.startsWith("yuki-") && key !== "yuki-conversations-v1" && typeof value === "string" && value.length <= 200_000)
+        .slice(0, 100));
+      await writeStateFile(preferencesFile, preferences);
+      return sendJson(res, 200, { ok: true });
+    }
     if (req.method === "POST" && req.url === "/api/speak") {
       const payload = await bodyJson(req);
       const text = String(payload.text || "").trim();

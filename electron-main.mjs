@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Preserve the established profile so existing chats, language and permissions stay available.
 // Önceden kullanılan profili koru; sohbetler, dil ve izin ayarları yerinde kalsın.
-app.setName("project-yuki");
+app.setName("Yuki");
 if (process.platform === "win32") app.setAppUserModelId("com.projectyuki.yuki");
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
@@ -300,6 +300,18 @@ async function initializeUserEnv() {
   }
 }
 
+// Move per-user access and model selections from the earlier profile name once.
+// Önceki profil adındaki kullanıcı erişim ve model ayarlarını bir kez yeni profile taşı.
+async function migrateLegacyProfileSettings() {
+  const oldProfile = join(app.getPath("appData"), "project-yuki");
+  const newProfile = app.getPath("userData");
+  for (const name of ["yuki-access.json", "yuki-model-preset.json"]) {
+    const source = join(oldProfile, name);
+    const destination = join(newProfile, name);
+    if (!existsSync(destination) && existsSync(source)) await copyFile(source, destination);
+  }
+}
+
 function loadEnvFile() {
   const root = runtimeRoot();
   const candidates = [
@@ -318,6 +330,14 @@ function loadEnvFile() {
     const key = trimmed.slice(0, separator).trim();
     const value = trimmed.slice(separator + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
     if (process.env[key] === undefined) process.env[key] = value;
+  }
+
+  // Fall back to local Ollama when a packaged example config contains no working cloud key.
+  // Paket ayarında kullanılabilir bulut anahtarı yoksa yerel Ollama'ya dön.
+  if (!process.env.GEMINI_API_KEY?.trim() && !process.env.OPENAI_API_KEY?.trim() && !process.env.OLLAMA_URL?.trim()) {
+    process.env.YUKI_PROVIDER = "ollama";
+    process.env.OLLAMA_URL = "http://127.0.0.1:11434";
+    process.env.OLLAMA_MODEL ||= "qwen2.5:7b";
   }
 }
 
@@ -417,12 +437,13 @@ async function ensureOllamaModelNow(model) {
 }
 
 function setMemoryPaths(root) {
-  if (process.env.YUKI_MEMORY_FILE) return;
   const dataRoot = app.isPackaged
     ? join(dirname(dirname(dirname(process.execPath))), "data")
     : join(root, "data");
-  process.env.YUKI_MEMORY_FILE = join(dataRoot, "yuki-memory.json");
-  process.env.YUKI_CONVERSATION_FILE = join(dataRoot, "yuki-conversations.jsonl");
+  process.env.YUKI_MEMORY_FILE ||= join(dataRoot, "yuki-memory.json");
+  process.env.YUKI_CONVERSATION_FILE ||= join(dataRoot, "yuki-conversations.jsonl");
+  process.env.YUKI_CHAT_ARCHIVE_FILE ||= join(app.getPath("userData"), "yuki-chat-archive.json");
+  process.env.YUKI_PREFERENCES_FILE ||= join(app.getPath("userData"), "yuki-preferences.json");
 }
 
 function syncStatusWindow() {
@@ -531,6 +552,7 @@ function createWindow(url) {
 
 async function boot() {
   const root = runtimeRoot();
+  await migrateLegacyProfileSettings();
   await initializeUserEnv();
   loadEnvFile();
   if (app.isPackaged && !process.env.QWEN_TTS_CACHE) {
